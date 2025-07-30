@@ -1,17 +1,16 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import httpx
+import json
 import os
 
 app = FastAPI()
 
-# Set this in your Railway environment variables to point to your bot's /link endpoint
-BOT_RECEIVE_URL = os.getenv("BOT_RECEIVE_URL")  # e.g., https://omnibot.up.railway.app/link
+DATA_FILE = "linked_users.json"
 
 class CharacterInfo(BaseModel):
     name: str
     realm: str
-    class_: str  # Avoid using 'class' directly, since it's a Python keyword
+    class_: str
 
 class LinkPayload(BaseModel):
     discord_id: int
@@ -19,14 +18,19 @@ class LinkPayload(BaseModel):
 
 @app.post("/onboard")
 async def onboard(payload: LinkPayload):
-    # Forward payload to the bot's /link endpoint
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(BOT_RECEIVE_URL, json=payload.dict())
-            return {
-                "status": "forwarded to bot",
-                "bot_response_code": response.status_code,
-                "bot_response_text": response.text
-            }
-    except Exception as e:
-        return {"status": "failed", "error": str(e)}
+    data = payload.dict()
+
+    # Load existing data
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            all_links = json.load(f)
+    else:
+        all_links = {}
+
+    # Save new data
+    all_links[str(data["discord_id"])] = data["characters"]
+
+    with open(DATA_FILE, "w") as f:
+        json.dump(all_links, f, indent=2)
+
+    return {"status": "saved"}
