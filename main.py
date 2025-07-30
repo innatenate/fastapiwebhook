@@ -1,18 +1,38 @@
 from fastapi import FastAPI, Request
-import uvicorn
+from pydantic import BaseModel
+import httpx
 import os
+import json
 
 app = FastAPI()
 
-@app.post("/webhook")
-async def webhook(request: Request):
-    payload = await request.json()
-    discord_id = payload.get("discord_id")
-    character_data = payload.get("character_data")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # Set this in Railway
 
-    # Here you would store the character info for this discord user
-    print(f"Linked {discord_id} with character: {character_data}")
-    return {"status": "ok"}
+class CharacterPayload(BaseModel):
+    discord_id: int
+    character_name: str
+    character_realm: str
+    character_class: str
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+@app.post("/onboard")
+async def onboard_character(payload: CharacterPayload):
+    # Format the embed or message for Discord
+    embed = {
+        "title": "🔗 Battle.net Account Linked",
+        "description": (
+            f"**Character:** {payload.character_name}-{payload.character_realm}\n"
+            f"**Class:** {payload.character_class}"
+        ),
+        "color": 0x3498db
+    }
+
+    message = {
+        "content": f"<@{payload.discord_id}> your character was successfully linked!",
+        "embeds": [embed]
+    }
+
+    # Send to Discord via webhook
+    async with httpx.AsyncClient() as client:
+        await client.post(DISCORD_WEBHOOK_URL, json=message)
+
+    return {"status": "success"}
