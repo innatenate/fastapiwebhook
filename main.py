@@ -1,38 +1,32 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pydantic import BaseModel
 import httpx
 import os
-import json
 
 app = FastAPI()
 
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")  # Set this in Railway
+# Set this in your Railway environment variables to point to your bot's /link endpoint
+BOT_RECEIVE_URL = os.getenv("BOT_RECEIVE_URL")  # e.g., https://omnibot.up.railway.app/link
 
-class CharacterPayload(BaseModel):
+class CharacterInfo(BaseModel):
+    name: str
+    realm: str
+    class_: str  # Avoid using 'class' directly, since it's a Python keyword
+
+class LinkPayload(BaseModel):
     discord_id: int
-    character_name: str
-    character_realm: str
-    character_class: str
+    characters: list[CharacterInfo]
 
 @app.post("/onboard")
-async def onboard_character(payload: CharacterPayload):
-    # Format the embed or message for Discord
-    embed = {
-        "title": "🔗 Battle.net Account Linked",
-        "description": (
-            f"**Character:** {payload.character_name}-{payload.character_realm}\n"
-            f"**Class:** {payload.character_class}"
-        ),
-        "color": 0x3498db
-    }
-
-    message = {
-        "content": f"<@{payload.discord_id}> your character was successfully linked!",
-        "embeds": [embed]
-    }
-
-    # Send to Discord via webhook
-    async with httpx.AsyncClient() as client:
-        await client.post(DISCORD_WEBHOOK_URL, json=message)
-
-    return {"status": "success"}
+async def onboard(payload: LinkPayload):
+    # Forward payload to the bot's /link endpoint
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(BOT_RECEIVE_URL, json=payload.dict())
+            return {
+                "status": "forwarded to bot",
+                "bot_response_code": response.status_code,
+                "bot_response_text": response.text
+            }
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
